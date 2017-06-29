@@ -44,3 +44,5 @@ pmllib
 2. 删除PMLLIB目录下 pml.index 文件
 3. 在PDMS命令行输入 pml rehash all
 4. 在PDMS命令行输入 show !!jmocategorymanager使用此工具。
+
+![snagit](https://github.com/vanvenj/jmocategorymanager/raw/master/snagit.png)
