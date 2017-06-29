@@ -28,7 +28,7 @@ pmllib
 │   pml.index
 │
 │─jmocategorymanager
-│   │   jmocatecorymanager.pmlfrm 主程序
+│   │   jmocategorymanager.pmlfrm 主程序
 │   │   format.py 编码处理程序
 │   │   readme.md 说明文档
 │   │   python27.exe Python环境
