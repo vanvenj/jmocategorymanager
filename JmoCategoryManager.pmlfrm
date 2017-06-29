@@ -1,0 +1,188 @@
+-------------------------------------------------------------------------------
+-- Module: Paragon
+-- Author: FanWenjie
+-- Description: Paragon Category Manager
+-- Version: V1.0
+-- Last modify:
+-------------------------------------------------------------------------------
+
+import 'GridControl'
+handle any
+endhandle
+
+kill !!JmoCategoryManager
+setup form !!JmoCategoryManager dialog docking resize
+    !this.FormTitle = 'Easy Category Export'
+
+    BUTTON .btnLoadCate 'Load CE' callback '!this.loadCategory()'
+    TEXT .newcode '' at xmax+0.5 ymin width 25 name
+    BUTTON .btnchoosepath 'Path ..' at x0 ymax+0.1 callback '!this.loadpath()'
+    TEXT .newpath '' at xmax+0.5 ymin width 25 name
+
+    FRAME .frmCategory 'Category List:' anchor left + right + top at X0 ymax
+        using namespace 'Aveva.Pdms.Presentation' 
+        CONTAINER .conGrid pmlnetControl 'grid' dock fill width 37 height 10
+    exit
+    FRAME .frmCateView 'Category Viewer:' anchor left + top at X0 ymax
+        VIEW .viewCE volume width 35 height 10
+    exit
+        
+    MENU .gridPopup popup
+    !this.gridPopup.Add('callback','PreView','!this.preview()') 
+    !this.gridPopup.Add('callback','Exprot','!this.Export()')   
+    !this.gridPopup.Add('callback','Navigate','!this.Navigate()') 
+
+    member .netGrid is NetGridControl
+    member .aSelectIndex is ARRAY
+    member .sProCode is STRING
+    member .aDataSource is ARRAY    
+    member .drawlist is real
+exit
+
+define method .JmoCategoryManager()
+    !this.newcode.val = 'NEWCODE'
+    !this.newpath.val = 'Choose path to export!'
+
+    using namespace 'Aveva.Pdms.Presentation'    
+    !this.netGrid = object NetGridControl()
+    !this.conGrid.Control = !this.netGrid.handle()
+    !this.netGrid.Addeventhandler('OnPopup',!this,'rightClickGrid')    
+    -- Add 3D view to view system (this shows the form)
+    !!gphViews.add(!this.viewCE )
+    -- Create local drawlist and add to 3D view    
+    !this.drawlist = !!gphDrawlists.createDrawList()
+
+    !this.netGrid.ColumnExcelFilter(true)
+    !this.netGrid.SetNameColumnImage()
+    !this.netGrid.OutlookGroupStyle(false)
+    !this.netGrid.FixedHeaders(false)
+    !this.netGrid.FixedRows(false)
+    !this.netGrid.ColumnSummaries(true)    
+endmethod
+
+define method .rightClickGrid(!data is ARRAY)
+    --q var !data
+    --q var !data[2]
+    !this.conGrid.popup = !this.gridPopup
+    !this.aSelectIndex = !data[2]
+    !this.conGrid.showpopup(!data[0],!data[1]) 
+endmethod
+
+define method .loadCategory()    
+    !aCategoryHeadList[1] = 'Name'
+    !aCategoryHeadList[2] = 'Desc'
+  
+    !aCategoryList = !!collectAllFor('CATE','',!!CE)
+    !this.aDataSource = ARRAY()
+    do !i index !aCategoryList
+        !this.aDataSource[!i][1] = !aCategoryList[!i].name
+        !this.aDataSource[!i][2] = !aCategoryList[!i].desc
+    enddo
+    
+    --将数据绑定到控件中    
+    using namespace 'Aveva.Pdms.Presentation'
+    !nds = object NetDataSource('Category List',!aCategoryHeadList,!this.aDataSource)
+    !this.netGrid.BindToDataSource(!nds)
+    --q var !this.netGrid
+    --!nds !aCategoryHeadList !this.aDataSource[1][1]
+endmethod
+
+define method .Navigate()
+    !tmp = !this.netGrid.GetSelectedRows()[1][1]
+    $!tmp
+endmethod
+
+define method .preview()
+    !scoms = !!collectAllFor('SCOM','',!this.netGrid.GetSelectedRows()[1][1].dbref())
+    if !scoms.size() ge 1 then
+        !viewelement = !scoms[1]
+    else
+      return
+    endif    
+    --q var !this.drawlist
+    !drawlist = !!gphDrawlists.drawlist(!this.drawlist)
+    !drawlist.removeall()
+    !drawlist.add(!viewelement)
+    --!!gphDrawlists.deleteDrawlist(!this.drawlist)
+    --!!gphDrawlists.detachAllViews(!this.drawlist)
+    !!gphDrawlists.attachView(!this.drawlist, !this.viewCE ) 
+    !this.viewCE.shaded = TRUE
+    --q var !this.viewCE.Direction
+    !!gphViews.limits(!this.viewCE , !viewelement) 
+endmethod
+
+define method .loadpath()
+    import 'pmlfilebrowser'
+    handle any
+    endhandle
+    using namespace 'Aveva.Pdms.Presentation'
+    !browser = object PMLFILEBROWSER('CHOOSE')
+    !browser.show('E:\', !this.newcode.val, 'SaveAs', false, 'txt (*.txt)|*.txt', 1)
+    if !browser.file() neq '' then
+        !this.newpath.val = !browser.file()
+    endif
+endmethod
+
+
+define method .Export()
+  !tmp = !this.netGrid.GetSelectedRows()[1][1]
+  $!tmp
+
+  -- CE must be CATE level
+  if !!ce.type neq 'CATE' then
+    !!alert.message('Please Select CATE !')
+    return
+  endif
+
+  !ce = !!ce
+
+  !scomList = !!collectAllFor('SCOM','',!ce)
+  -- check if the scom ptse gmse dtse btse in the same hierachy
+  -- if they are in different hierachy they should be exported both
+  !exportHierachy=Array()
+  !exportHierachy.append(!ce)
+  !unset = =0/0
+  do !scom values !scomList
+    if !scom.ptref neq !unset and !scom.ptref.owner neq !ce then
+      !exportHierachy.append(!scom.ptref)
+    endif
+    if !scom.gmref neq !unset and !scom.gmref.owner neq !ce then
+      !exportHierachy.append(!scom.gmref)
+    endif
+    if !scom.dtref neq !unset and !scom.dtref.owner neq !ce then
+      !exportHierachy.append(!scom.dtref)
+    endif
+    if not !scom.blrfarray.empty() and !scom.blrfarray[0].owner neq !ce then
+      !exportHierachy.append(!scom.blrfa[0])
+    endif
+  enddo
+  -- the hierachy which should be exported is in !exportHierachy array
+  !exportHierachy.Unique()
+  -- convert to string 
+  !h = ''
+  do !i values !exportHierachy
+    !h = !h + ' ' + !i.name
+  enddo
+
+  -- define the tmp file to save
+  !filename = !!evar('PDMSWK') + '\tmp.txt'
+  syscom |if exist $!filename del $!filename|
+  
+  -- define python run time 
+  !pythonpath = !!pml.getpathname('jmocategorymanager.pmlfrm').before('/jmocategorymanager.pmlfrm')
+  !python27 = !pythonpath + '\python27.exe'
+  !formatscript = !pythonpath + '\format.py'
+  
+  -- export data
+  file /$!filename
+  output $!h
+  term
+  
+  !newcode = !this.newcode.val
+  !newcodefile = !!evar('PDMSWK') + '\' + !newcode + '.txt'
+  !newpath = !this.newpath.val
+  syscom |$!python27 $!formatscript $!filename $!newcode $!newpath|
+  --syscom |start $!newcodefile|
+
+endmethod
+
